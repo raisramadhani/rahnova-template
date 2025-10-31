@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rahnova.id - Sistem Kasir</title>
+
+  <script>
+    // ========= MOCK SDK (PENGGANTI FILE YANG HILANG) =========
+
+    /**
+     * Mock untuk data_sdk.js
+     * Ini berpura-pura menjadi database.
+     */
+    window.dataSdk = {
+      init: async (handler) => {
+        console.log("Mock dataSdk init");
+        // Kita panggil onDataChanged dengan data kosong.
+        // Logika aplikasi Anda akan menggabungkannya dengan `referenceProducts`.
+        handler.onDataChanged([]);
+        return { isOk: true };
+      },
+      create: async (data) => {
+        console.log("Mock dataSdk create:", data);
+        // Berpura-pura berhasil menyimpan
+        return { isOk: true };
+      },
+      update: async (data) => {
+        console.log("Mock dataSdk update:", data);
+        // Berpura-pura berhasil update
+        return { isOk: true };
+      }
+    };
+
+    /**
+     * Mock untuk element_sdk.js
+     * Ini berpura-pura mengatur konfigurasi tampilan.
+     */
+    window.elementSdk = {
+      config: {},
+      _onConfigChange: () => { },
+      init: (options) => {
+        console.log("Mock elementSdk init");
+        // Simpan konfigurasi default dan callback
+        this.config = options.defaultConfig;
+        this._onConfigChange = options.onConfigChange;
+
+        // Langsung panggil onConfigChange untuk menerapkan style awal
+        if (this._onConfigChange) {
+          this._onConfigChange(this.config);
+        }
+      },
+      setConfig: (newConfig) => {
+        console.log("Mock elementSdk setConfig:", newConfig);
+        // Update config dan panggil callback
+        this.config = { ...this.config, ...newConfig };
+        if (this._onConfigChange) {
+          this._onConfigChange(this.config);
+        }
+      }
+    };
+    // ========= AKHIR DARI MOCK SDK =========
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    .product-card {
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 100%);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .product-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .cart-item {
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 16px 24px;
+      border-radius: 8px;
+      font-weight: 500;
+      z-index: 1000;
+      animation: toastIn 0.3s ease;
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .loading-spinner {
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-top: 3px solid white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+  <style>
+    @view-transition {
+      navigation: auto;
+    }
+  </style>
+</head>
+
+<body class="min-h-full flex flex-col">
+  <nav class="surface-bg shadow-lg border-b" style="border-color: #e2e8f0;">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        <div class="flex items-center space-x-4">
+          <div class="flex-shrink-0">
+            <div
+              class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <span class="text-white font-bold text-lg">R</span>
+            </div>
+          </div>
+          <div>
+            <h1 id="navbar-title" class="text-primary font-bold text-xl">Rahnova.id</h1>
+            <p class="text-secondary text-sm">Sistem Kasir Modern</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div class="hidden md:flex items-center space-x-6">
+            <div class="text-center">
+              <div id="nav-time" class="text-primary font-semibold"></div>
+              <div class="text-secondary text-xs">
+                Waktu
+              </div>
+            </div>
+            <div class="text-center">
+              <div id="nav-date" class="text-primary font-semibold"></div>
+              <div class="text-secondary text-xs">
+                Tanggal
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2">
+            <div
+              class="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
+              <span class="text-white font-semibold text-sm">K</span>
+            </div>
+            <div class="hidden sm:block">
+              <div class="text-primary font-medium text-sm">
+                Kasir
+              </div>
+              <div class="text-secondary text-xs">
+                Online
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+  <div id="app" class="flex-1 flex flex-col"></div>
+  <footer class="surface-bg border-t mt-8" style="border-color: #e2e8f0;">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+        <div class="flex items-center space-x-4">
+          <div
+            class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+            <span class="text-white font-bold">R</span>
+          </div>
+          <div>
+            <div class="text-primary font-semibold">
+              Rahnova.id
+            </div>
+            <div class="text-secondary text-sm">
+              Solusi Kasir Digital Terdepan
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center space-x-6 text-sm">
+          <div class="text-center">
+            <div class="text-primary font-medium">
+              Versi 2.1.0
+            </div>
+            <div class="text-secondary text-xs">
+              Stabil
+            </div>
+          </div>
+          <div class="text-center">
+            <div class="text-primary font-medium">
+              24/7
+            </div>
+            <div class="text-secondary text-xs">
+              Support
+            </div>
+          </div>
+          <div class="text-center">
+            <div class="text-primary font-medium">
+              SSL
+            </div>
+            <div class="text-secondary text-xs">
+              Aman
+            </div>
+          </div>
+        </div>
+        <div class="text-secondary text-sm text-center md:text-right">
+          <div>
+            © 2024 Rahnova.id
+          </div>
+          <div>
+            Semua hak dilindungi
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+  <script>
+    const defaultConfig = {
+      background_color: "#f1f5f9",
+      surface_color: "#ffffff",
+      text_color: "#1e293b",
+      primary_action_color: "#6366f1",
+      secondary_action_color: "#64748b",
+      font_family: "system-ui",
+      font_size: 16,
+      app_title: "Rahnova.id",
+      welcome_message: "Selamat datang di sistem kasir modern"
+    };
+
+    // Reference products that will be joined with user data
+    const referenceProducts = [
+      { id: "prod-001", nama: "Kopi Susu Gula Aren", harga: 25000, kategori: "Minuman" },
+      { id: "prod-002", nama: "Nasi Goreng Spesial", harga: 35000, kategori: "Makanan" },
+      { id: "prod-003", nama: "Es Teh Manis", harga: 8000, kategori: "Minuman" },
+      { id: "prod-004", nama: "Ayam Geprek", harga: 28000, kategori: "Makanan" },
+      { id: "prod-005", nama: "Kentang Goreng", harga: 15000, kategori: "Snack" },
+      { id: "prod-006", nama: "Jus Alpukat", harga: 18000, kategori: "Minuman" },
+      { id: "prod-007", nama: "Mie Ayam Bakso", harga: 22000, kategori: "Makanan" },
+      { id: "prod-008", nama: "Es Jeruk Peras", harga: 12000, kategori: "Minuman" },
+      { id: "prod-009", nama: "Pisang Goreng", harga: 10000, kategori: "Snack" },
+      { id: "prod-010", nama: "Gado-Gado", harga: 20000, kategori: "Makanan" },
+      { id: "prod-011", nama: "Cappuccino", harga: 30000, kategori: "Minuman" },
+      { id: "prod-012", nama: "Keripik Singkong", harga: 8000, kategori: "Snack" },
+      { id: "prod-013", nama: "Soto Ayam", harga: 25000, kategori: "Makanan" },
+      { id: "prod-014", nama: "Es Krim Vanilla", harga: 15000, kategori: "Snack" },
+      { id: "prod-015", nama: "Jus Mangga", harga: 16000, kategori: "Minuman" },
+      { id: "prod-016", nama: "Bakwan Jagung", harga: 12000, kategori: "Snack" },
+      { id: "prod-017", nama: "Rendang Daging", harga: 45000, kategori: "Makanan" },
+      { id: "prod-018", nama: "Thai Tea", harga: 20000, kategori: "Minuman" }
+    ];
+
+    let cart = [];
+    let allProducts = [];
+    let currentFilter = "Semua";
+
+    const dataHandler = {
+      onDataChanged(data) {
+        // Merge reference products with user data
+        allProducts = referenceProducts.map(refProd => {
+          const userData = data.find(d => d.id === refProd.id);
+          return {
+            ...refProd,
+            stok: userData?.stok ?? 50,
+            terjual: userData?.terjual ?? Math.floor(Math.random() * 20) + 5,
+            __backendId: userData?.__backendId
+          };
+        });
+
+        renderProducts();
+        updateStats();
+        updateDateTime();
+      }
+    };
+
+    async function initApp() {
+      // Baris ini sekarang akan SUKSES karena window.dataSdk sudah ada (dari mock)
+      const initResult = await window.dataSdk.init(dataHandler);
+      if (!initResult.isOk) {
+        showToast("Gagal menginisialisasi aplikasi", "error");
+        return;
+      }
+
+      // Baris ini juga akan SUKSES karena window.elementSdk sudah ada (dari mock)
+      if (window.elementSdk) {
+        window.elementSdk.init({
+          defaultConfig,
+          onConfigChange: async (config) => {
+            const customFont = config.font_family || defaultConfig.font_family;
+            const baseFontStack = 'system-ui, -apple-system, sans-serif';
+            const baseSize = config.font_size || defaultConfig.font_size;
+            const bgColor = config.background_color || defaultConfig.background_color;
+            const surfaceColor = config.surface_color || defaultConfig.surface_color;
+            const textColor = config.text_color || defaultConfig.text_color;
+            const primaryColor = config.primary_action_color || defaultConfig.primary_action_color;
+            const secondaryColor = config.secondary_action_color || defaultConfig.secondary_action_color;
+
+            document.body.style.fontFamily = `${customFont}, ${baseFontStack}`;
+            document.body.style.backgroundColor = bgColor;
+            document.body.style.color = textColor;
+
+            const appTitle = config.app_title || defaultConfig.app_title;
+            const welcomeMsg = config.welcome_message || defaultConfig.welcome_message;
+
+            const titleEl = document.getElementById('app-title');
+            const welcomeEl = document.getElementById('welcome-message');
+
+            if (titleEl) {
+              titleEl.textContent = appTitle;
+              titleEl.style.fontSize = `${baseSize * 1.5}px`;
+              titleEl.style.color = textColor;
+            }
+
+            if (welcomeEl) {
+              welcomeEl.textContent = welcomeMsg;
+              welcomeEl.style.fontSize = `${baseSize * 0.875}px`;
+              welcomeEl.style.color = secondaryColor;
+            }
+
+            document.querySelectorAll('.surface-bg').forEach(el => {
+              el.style.backgroundColor = surfaceColor;
+            });
+
+            document.querySelectorAll('.text-primary').forEach(el => {
+              el.style.color = textColor;
+            });
+
+            document.querySelectorAll('.text-secondary').forEach(el => {
+              el.style.color = secondaryColor;
+            });
+
+            document.querySelectorAll('.btn-primary').forEach(el => {
+              el.style.backgroundColor = primaryColor;
+              el.style.fontSize = `${baseSize * 0.875}px`;
+            });
+
+            document.querySelectorAll('.btn-secondary').forEach(el => {
+              el.style.backgroundColor = secondaryColor;
+              el.style.fontSize = `${baseSize * 0.875}px`;
+            });
+
+            document.querySelectorAll('.product-name').forEach(el => {
+              el.style.fontSize = `${baseSize}px`;
+              el.style.color = textColor;
+            });
+
+            document.querySelectorAll('.product-price').forEach(el => {
+              el.style.fontSize = `${baseSize * 1.125}px`;
+              el.style.color = primaryColor;
+            });
+
+            document.querySelectorAll('.product-stock').forEach(el => {
+              el.style.fontSize = `${baseSize * 0.875}px`;
+              el.style.color = secondaryColor;
+            });
+
+            document.querySelectorAll('.stat-value').forEach(el => {
+              el.style.fontSize = `${baseSize * 1.875}px`;
+              el.style.color = textColor;
+            });
+
+            document.querySelectorAll('.stat-label').forEach(el => {
+              el.style.fontSize = `${baseSize * 0.875}px`;
+              el.style.color = secondaryColor;
+            });
+
+            document.querySelectorAll('.cart-item-name').forEach(el => {
+              el.style.fontSize = `${baseSize}px`;
+              el.style.color = textColor;
+            });
+
+            document.querySelectorAll('.cart-item-price').forEach(el => {
+              el.style.fontSize = `${baseSize * 0.875}px`;
+              el.style.color = secondaryColor;
+            });
+
+            document.querySelectorAll('.total-label').forEach(el => {
+              el.style.fontSize = `${baseSize * 1.125}px`;
+              el.style.color = textColor;
+            });
+
+            document.querySelectorAll('.total-value').forEach(el => {
+              el.style.fontSize = `${baseSize * 1.5}px`;
+              el.style.color = primaryColor;
+            });
+          },
+          mapToCapabilities: (config) => ({
+            recolorables: [
+              {
+                get: () => config.background_color || defaultConfig.background_color,
+                set: (value) => {
+                  if (window.elementSdk) {
+                    window.elementSdk.setConfig({ background_color: value });
+                  }
+                }
+              },
+              {
+                get: () => config.surface_color || defaultConfig.surface_color,
+                set: (value) => {
+                  if (window.elementSdk) {
+                    window.elementSdk.setConfig({ surface_color: value });
+                  }
+                }
+              },
+              {
+                get: () => config.text_color || defaultConfig.text_color,
+                set: (value) => {
+                  if (window.elementSdk) {
+                    window.elementSdk.setConfig({ text_color: value });
+                  }
+                }
+              },
+              {
+                get: () => config.primary_action_color || defaultConfig.primary_action_color,
+                set: (value) => {
+                  if (window.elementSdk) {
+                    window.elementSdk.setConfig({ primary_action_color: value });
+                  }
+                }
+              },
+              {
+                get: () => config.secondary_action_color || defaultConfig.secondary_action_color,
+                set: (value) => {
+                  if (window.elementSdk) {
+                    window.elementSdk.setConfig({ secondary_action_color: value });
+                  }
+                }
+              }
+            ],
+            borderables: [],
+            fontEditable: {
+              get: () => config.font_family || defaultConfig.font_family,
+              set: (value) => {
+                if (window.elementSdk) {
+                  window.elementSdk.setConfig({ font_family: value });
+                }
+              }
+            },
+            fontSizeable: {
+              get: () => config.font_size || defaultConfig.font_size,
+              set: (value) => {
+                if (window.elementSdk) {
+                  window.elementSdk.setConfig({ font_size: value });
+                }
+              }
+            }
+          }),
+          mapToEditPanelValues: (config) => new Map([
+            ["app_title", config.app_title || defaultConfig.app_title],
+            ["welcome_message", config.welcome_message || defaultConfig.welcome_message]
+          ])
+        });
+      }
+
+      renderApp();
+    }
+
+    function renderApp() {
+      const config = window.elementSdk?.config || defaultConfig;
+      const appTitle = config.app_title || defaultConfig.app_title;
+      const welcomeMsg = config.welcome_message || defaultConfig.welcome_message;
+
+      document.getElementById('app').innerHTML = `
+        <div class="flex-1 flex flex-col lg:flex-row gap-6 p-6">
+          <div class="flex-1 flex flex-col gap-6">
+            <div class="surface-bg rounded-2xl p-6 shadow-sm">
+              <h1 id="app-title" class="text-primary font-bold mb-2">${appTitle}</h1>
+              <p id="welcome-message" class="text-secondary">${welcomeMsg}</p>
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="surface-bg rounded-xl p-4 shadow-sm">
+                <div id="total-products" class="stat-value font-bold">0</div>
+                <div class="stat-label">Total Produk</div>
+              </div>
+              <div class="surface-bg rounded-xl p-4 shadow-sm">
+                <div id="total-stock" class="stat-value font-bold">0</div>
+                <div class="stat-label">Total Stok</div>
+              </div>
+              <div class="surface-bg rounded-xl p-4 shadow-sm">
+                <div id="total-sold" class="stat-value font-bold">0</div>
+                <div class="stat-label">Terjual Hari Ini</div>
+              </div>
+              <div class="surface-bg rounded-xl p-4 shadow-sm">
+                <div id="total-revenue" class="stat-value font-bold">Rp 0</div>
+                <div class="stat-label">Pendapatan</div>
+              </div>
+            </div>
+
+            <div class="surface-bg rounded-2xl p-6 shadow-sm">
+              <div class="flex flex-wrap gap-3 mb-4">
+                <button onclick="filterProducts('Semua')" class="btn-primary px-4 py-2 rounded-lg text-white font-medium hover:opacity-90 transition-opacity">Semua</button>
+                <button onclick="filterProducts('Makanan')" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium hover:opacity-90 transition-opacity">Makanan</button>
+                <button onclick="filterProducts('Minuman')" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium hover:opacity-90 transition-opacity">Minuman</button>
+                <button onclick="filterProducts('Snack')" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium hover:opacity-90 transition-opacity">Snack</button>
+              </div>
+              <button onclick="showAddProductForm()" class="btn-primary w-full py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity">+ Tambah Produk Baru</button>
+            </div>
+
+            <div id="products-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+          </div>
+
+          <div class="lg:w-96 flex flex-col gap-6">
+            <div class="surface-bg rounded-2xl p-6 shadow-sm flex flex-col" style="height: calc(100% - 0px);">
+              <h2 class="text-primary font-bold mb-4" style="font-size: 1.25rem;">Keranjang Belanja</h2>
+              <div id="cart-items" class="flex-1 overflow-y-auto mb-4 space-y-3"></div>
+              <div class="border-t pt-4 space-y-4">
+                <div class="flex justify-between items-center">
+                  <span class="total-label font-semibold">Total:</span>
+                  <span id="cart-total" class="total-value font-bold">Rp 0</span>
+                </div>
+                <button onclick="checkout()" class="btn-primary w-full py-3 rounded-lg text-white font-bold hover:opacity-90 transition-opacity">Proses Pembayaran</button>
+                <button onclick="clearCart()" class="btn-secondary w-full py-2 rounded-lg text-white font-medium hover:opacity-90 transition-opacity">Kosongkan Keranjang</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="add-product-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div class="surface-bg rounded-2xl p-6 max-w-md w-full shadow-xl">
+            <h3 class="text-primary font-bold mb-4" style="font-size: 1.25rem;">Tambah Produk Baru</h3>
+            <form id="add-product-form" class="space-y-4">
+              <div>
+                <label class="text-primary block mb-2 font-medium">Nama Produk</label>
+                <input type="text" id="product-name" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: #e2e8f0;">
+              </div>
+              <div>
+                <label class="text-primary block mb-2 font-medium">Harga</label>
+                <input type="number" id="product-price" required min="0" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: #e2e8f0;">
+              </div>
+              <div>
+                <label class="text-primary block mb-2 font-medium">Stok</label>
+                <input type="number" id="product-stock" required min="0" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: #e2e8f0;">
+              </div>
+              <div>
+                <label class="text-primary block mb-2 font-medium">Kategori</label>
+                <select id="product-category" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: #e2e8f0;">
+                  <option value="Makanan">Makanan</option>
+                  <option value="Minuman">Minuman</option>
+                  <option value="Snack">Snack</option>
+                </select>
+              </div>
+              <div class="flex gap-3 pt-2">
+                <button type="submit" class="btn-primary flex-1 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity">Simpan</button>
+                <button type="button" onclick="hideAddProductForm()" class="btn-secondary flex-1 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity">Batal</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+
+      // Kita perlu panggil onConfigChange secara manual SEKALI LAGI setelah elemen dirender
+      // agar style untuk elemen-elemen baru (seperti .product-name, .cart-item, dll) diterapkan
+      if (window.elementSdk && window.elementSdk._onConfigChange) {
+        window.elementSdk._onConfigChange(window.elementSdk.config);
+      }
+
+      // Kita juga perlu panggil renderProducts dan updateStats di sini
+      // karena dataHandler.onDataChanged mungkin dipanggil SEBELUM renderApp selesai
+      renderProducts();
+      updateStats();
+
+      document.getElementById('add-product-form').addEventListener('submit', handleAddProduct);
+    }
+
+    function renderProducts() {
+      const grid = document.getElementById('products-grid');
+      if (!grid) return;
+
+      const filtered = currentFilter === "Semua"
+        ? allProducts
+        : allProducts.filter(p => p.kategori === currentFilter);
+
+      grid.innerHTML = filtered.map(product => `
+        <div class="product-card surface-bg rounded-xl p-4 shadow-sm">
+          <div class="flex justify-between items-start mb-3">
+            <div class="flex-1">
+              <h3 class="product-name font-semibold mb-1">${product.nama}</h3>
+              <p class="product-stock">${product.kategori} • Stok: ${product.stok}</p>
+            </div>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="product-price font-bold">Rp ${product.harga.toLocaleString('id-ID')}</span>
+            <button 
+              onclick="addToCart('${product.id}')" 
+              ${product.stok === 0 ? 'disabled' : ''}
+              class="btn-primary px-4 py-2 rounded-lg text-white font-medium hover:opacity-90 transition-opacity ${product.stok === 0 ? 'opacity-50 cursor-not-allowed' : ''}"
+            >
+              ${product.stok === 0 ? 'Habis' : '+ Keranjang'}
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      // Panggil lagi onConfigChange untuk elemen yang baru dibuat
+      if (window.elementSdk && window.elementSdk._onConfigChange) {
+        window.elementSdk._onConfigChange(window.elementSdk.config);
+      }
+    }
+
+    function renderCart() {
+      const cartEl = document.getElementById('cart-items');
+      const totalEl = document.getElementById('cart-total');
+
+      if (!cartEl || !totalEl) return;
+
+      if (cart.length === 0) {
+        cartEl.innerHTML = '<p class="text-secondary text-center py-8">Keranjang masih kosong</p>';
+        totalEl.textContent = 'Rp 0';
+        return;
+      }
+
+      const total = cart.reduce((sum, item) => sum + (item.harga * item.qty), 0);
+
+      cartEl.innerHTML = cart.map(item => `
+        <div class="cart-item surface-bg rounded-lg p-3 border" style="border-color: #e2e8f0;">
+          <div class="flex justify-between items-start mb-2">
+            <span class="cart-item-name font-medium">${item.nama}</span>
+            <button onclick="removeFromCart('${item.id}')" class="text-secondary hover:opacity-70">✕</button>
+          </div>
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2">
+              <button onclick="decreaseQty('${item.id}')" class="btn-secondary w-8 h-8 rounded flex items-center justify-center text-white font-bold hover:opacity-90">−</button>
+              <span class="cart-item-price font-medium w-8 text-center">${item.qty}</span>
+              <button onclick="increaseQty('${item.id}')" class="btn-primary w-8 h-8 rounded flex items-center justify-center text-white font-bold hover:opacity-90">+</button>
+            </div>
+            <span class="cart-item-price font-semibold">Rp ${(item.harga * item.qty).toLocaleString('id-ID')}</span>
+          </div>
+        </div>
+      `).join('');
+
+      totalEl.textContent = `Rp ${total.toLocaleString('id-ID')}`;
+
+      // Panggil lagi onConfigChange untuk elemen yang baru dibuat
+      if (window.elementSdk && window.elementSdk._onConfigChange) {
+        window.elementSdk._onConfigChange(window.elementSdk.config);
+      }
+    }
+
+    function updateStats() {
+      const totalProducts = allProducts.length;
+      const totalStock = allProducts.reduce((sum, p) => sum + p.stok, 0);
+      const totalSold = allProducts.reduce((sum, p) => sum + p.terjual, 0);
+      const totalRevenue = allProducts.reduce((sum, p) => sum + (p.harga * p.terjual), 0);
+
+      const totalProductsEl = document.getElementById('total-products');
+      const totalStockEl = document.getElementById('total-stock');
+      const totalSoldEl = document.getElementById('total-sold');
+      const totalRevenueEl = document.getElementById('total-revenue');
+
+      if (totalProductsEl) totalProductsEl.textContent = totalProducts;
+      if (totalStockEl) totalStockEl.textContent = totalStock;
+      if (totalSoldEl) totalSoldEl.textContent = totalSold;
+      if (totalRevenueEl) totalRevenueEl.textContent = `Rp ${totalRevenue.toLocaleString('id-ID')}`;
+    }
+
+    function filterProducts(category) {
+      currentFilter = category;
+      renderProducts();
+    }
+
+    function addToCart(productId) {
+      const product = allProducts.find(p => p.id === productId);
+      if (!product || product.stok === 0) return;
+
+      const existingItem = cart.find(item => item.id === productId);
+
+      if (existingItem) {
+        if (existingItem.qty < product.stok) {
+          existingItem.qty++;
+        } else {
+          showToast('Stok tidak mencukupi', 'error');
+          return;
+        }
+      } else {
+        cart.push({
+          id: product.id,
+          nama: product.nama,
+          harga: product.harga,
+          qty: 1
+        });
+      }
+
+      renderCart();
+      showToast('Ditambahkan ke keranjang', 'success');
+    }
+
+    function removeFromCart(productId) {
+      cart = cart.filter(item => item.id !== productId);
+      renderCart();
+    }
+
+    function increaseQty(productId) {
+      const product = allProducts.find(p => p.id === productId);
+      const cartItem = cart.find(item => item.id === productId);
+
+      if (cartItem && product && cartItem.qty < product.stok) {
+        cartItem.qty++;
+        renderCart();
+      } else {
+        showToast('Stok tidak mencukupi', 'error');
+      }
+    }
+
+    function decreaseQty(productId) {
+      const cartItem = cart.find(item => item.id === productId);
+
+      if (cartItem) {
+        if (cartItem.qty > 1) {
+          cartItem.qty--;
+        } else {
+          removeFromCart(productId);
+        }
+        renderCart();
+      }
+    }
+
+    function clearCart() {
+      cart = [];
+      renderCart();
+      showToast('Keranjang dikosongkan', 'success');
+    }
+
+    async function checkout() {
+      if (cart.length === 0) {
+        showToast('Keranjang masih kosong', 'error');
+        return;
+      }
+
+      // Perlu mencari tombol checkout dengan benar
+      const checkoutBtn = event.target.closest('button');
+      if (!checkoutBtn) return;
+
+      checkoutBtn.disabled = true;
+      checkoutBtn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+
+      for (const item of cart) {
+        const product = allProducts.find(p => p.id === item.id);
+        if (product) {
+          const userData = {
+            id: product.id,
+            nama: product.nama,
+            harga: product.harga,
+            kategori: product.kategori,
+            stok: product.stok - item.qty,
+            terjual: product.terjual + item.qty,
+            __backendId: product.__backendId
+          };
+
+          if (product.__backendId) {
+            // Panggil mock SDK
+            const updateResult = await window.dataSdk.update(userData);
+            if (!updateResult.isOk) {
+              showToast('Gagal memproses pembayaran', 'error');
+              checkoutBtn.disabled = false;
+              checkoutBtn.textContent = 'Proses Pembayaran';
+              return;
+            }
+          } else {
+            // Panggil mock SDK
+            const createResult = await window.dataSdk.create({
+              id: product.id,
+              nama: product.nama,
+              harga: product.harga,
+              kategori: product.kategori,
+              stok: product.stok - item.qty,
+              terjual: product.terjual + item.qty
+            });
+            if (!createResult.isOk) {
+              showToast('Gagal memproses pembayaran', 'error');
+              checkoutBtn.disabled = false;
+              checkoutBtn.textContent = 'Proses Pembayaran';
+              return;
+            }
+          }
+
+          // Update data di 'allProducts' secara lokal (karena SDK-nya mock)
+          product.stok -= item.qty;
+          product.terjual += item.qty;
+
+        }
+      }
+
+      const total = cart.reduce((sum, item) => sum + (item.harga * item.qty), 0);
+      showToast(`Pembayaran berhasil! Total: Rp ${total.toLocaleString('id-ID')}`, 'success');
+
+      cart = [];
+      renderCart();
+
+      // Update tampilan produk (stok) dan statistik
+      renderProducts();
+      updateStats();
+
+      checkoutBtn.disabled = false;
+      checkoutBtn.textContent = 'Proses Pembayaran';
+    }
+
+    function showAddProductForm() {
+      document.getElementById('add-product-modal').classList.remove('hidden');
+    }
+
+    function hideAddProductForm() {
+      document.getElementById('add-product-modal').classList.add('hidden');
+      document.getElementById('add-product-form').reset();
+    }
+
+    async function handleAddProduct(e) {
+      e.preventDefault();
+
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+
+      const recordCount = allProducts.length;
+      if (recordCount >= 999) {
+        showToast('Maksimum 999 produk tercapai. Hapus beberapa produk terlebih dahulu.', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Simpan';
+        return;
+      }
+
+      const nama = document.getElementById('product-name').value;
+      const harga = parseInt(document.getElementById('product-price').value);
+      const stok = parseInt(document.getElementById('product-stock').value);
+      const kategori = document.getElementById('product-category').value;
+
+      const newId = `prod-${Date.now()}`;
+
+      const newProductData = {
+        id: newId,
+        nama: nama,
+        harga: harga,
+        stok: stok,
+        kategori: kategori,
+        terjual: 0
+      };
+
+      // Panggil mock SDK
+      const createResult = await window.dataSdk.create(newProductData);
+
+      if (createResult.isOk) {
+        // Tambahkan ke 'allProducts' secara lokal (karena SDK-nya mock)
+        allProducts.push(newProductData);
+
+        showToast('Produk berhasil ditambahkan', 'success');
+        hideAddProductForm();
+
+        // Update tampilan produk dan statistik
+        renderProducts();
+        updateStats();
+
+      } else {
+        showToast('Gagal menambahkan produk', 'error');
+      }
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Simpan';
+    }
+
+    function showToast(message, type) {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    function updateDateTime() {
+      const now = new Date();
+      const timeEl = document.getElementById('nav-time');
+      const dateEl = document.getElementById('nav-date');
+
+      if (timeEl) {
+        timeEl.textContent = now.toLocaleTimeString('id-ID', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+      }
+
+      if (dateEl) {
+        dateEl.textContent = now.toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        });
+      }
+    }
+
+    // Update time every second
+    setInterval(updateDateTime, 1000);
+
+    initApp();
+  </script>
+
+</body>
+
+</html>
